@@ -1,259 +1,167 @@
-// Add this at the beginning of the file
-// Add this debounce function at the beginning
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+// Debounce utility to limit how often a function runs
+function debounce(fn, delay) {
+    let timer;
+    return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
     };
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('registrationForm');
     const submitButton = form.querySelector('button[type="submit"]');
+    const requiredFields = form.querySelectorAll('input[required], select[required], textarea[required]');
+    const termsCheckbox = document.getElementById('terms');
+    const toggleButtons = document.querySelectorAll('.toggle-password');
+
     submitButton.disabled = true;
 
-    // Add debounced validation
-    const debouncedValidation = debounce((e) => validateField(e), 500);
-
-    // Update event listeners for required fields
-    const requiredInputs = form.querySelectorAll('input[required], select[required], textarea[required]');
-    requiredInputs.forEach(input => {
-        input.addEventListener('input', debouncedValidation);
-        input.addEventListener('blur', validateField);
-        input.addEventListener('input', checkFormValidity);
-    });
-
-    // Add password toggle functionality
-    const toggleButtons = document.querySelectorAll('.toggle-password');
+    // Show/hide password toggle
     toggleButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const targetId = this.getAttribute('data-target');
-            const passwordInput = document.getElementById(targetId);
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                this.textContent = '🔒';
-            } else {
-                passwordInput.type = 'password';
-                this.textContent = '👁️';
-            }
+        button.addEventListener('click', () => {
+            const target = document.getElementById(button.dataset.target);
+            const isHidden = target.type === 'password';
+            target.type = isHidden ? 'text' : 'password';
+            button.textContent = isHidden ? '🔒' : '👁️';
         });
     });
 
-    // Add terms checkbox listener
-    const termsCheckbox = document.getElementById('terms');
+    // Debounced input validation
+    const debouncedValidate = debounce(validateField, 500);
+
+    requiredFields.forEach(field => {
+        field.addEventListener('input', debouncedValidate);
+        field.addEventListener('blur', validateField);
+        field.addEventListener('input', checkFormValidity);
+    });
+
     termsCheckbox.addEventListener('change', checkFormValidity);
+
+    // Handle form submission
+    form.addEventListener('submit', validateForm);
 });
 
-// Update password validation in validateField function
-function validateField(event) {
-    const input = event.target;
-    clearErrorForInput(input);
-    
-    switch(input.id) {
+// Validate individual fields
+function validateField(e) {
+    const input = e.target;
+    clearError(input);
+
+    const value = input.value.trim();
+    const id = input.id;
+    const show = (msg) => showError(input, msg);
+
+    switch (id) {
         case 'fullname':
-            if (input.value.trim().length < 2) {
-                showError(input, 'Name must be at least 2 characters long');
-            }
+            if (value.length < 2) show('Name must be at least 2 characters');
             break;
-            
         case 'email':
-            if (!(/^[^\s@]+@[^\s@]+\.[^\s@]+$/).test(input.value)) {
-                showError(input, 'Please enter a valid email address');
-            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) show('Enter a valid email');
             break;
-            
         case 'password':
-            const password = input.value;
-            if (password.length < 8) {
-                showError(input, 'Password must be at least 8 characters long');
-            } else if (!/[A-Z]/.test(password)) {
-                showError(input, 'Password must contain at least one uppercase letter');
-            } else if (!/[a-z]/.test(password)) {
-                showError(input, 'Password must contain at least one lowercase letter');
-            } else if (!/\d/.test(password)) {
-                showError(input, 'Password must contain at least one number');
-            } else if (!/[@$!%*?&]/.test(password)) {
-                showError(input, 'Password must contain at least one special character (@$!%*?&)');
-            }
-            
-            // Also validate confirm password if it has a value
-            const confirmPassword = document.getElementById('confirmPassword');
-            if (confirmPassword.value) {
-                validateField({ target: confirmPassword });
-            }
+            if (value.length < 8) show('Password must be at least 8 characters');
+            else if (!/[A-Z]/.test(value)) show('Add an uppercase letter');
+            else if (!/[a-z]/.test(value)) show('Add a lowercase letter');
+            else if (!/\d/.test(value)) show('Add a number');
+            else if (!/[@$!%*?&]/.test(value)) show('Add a special character (@$!%*?&)');
+
+            const confirm = document.getElementById('confirmPassword');
+            if (confirm.value) validateField({ target: confirm });
             break;
-            
         case 'confirmPassword':
-            const originalPassword = document.getElementById('password').value;
-            if (input.value && input.value !== originalPassword) {
-                showError(input, 'Passwords do not match');
-            }
+            const pwd = document.getElementById('password').value;
+            if (value && value !== pwd) show('Passwords do not match');
             break;
-            
         case 'phone':
-            if (input.value && !input.value.match(/^\d{10}$/)) {
-                showError(input, 'Please enter a valid 10-digit phone number');
-            }
+            if (value && !/^\d{10}$/.test(value)) show('Enter a 10-digit phone number');
             break;
-            
         case 'dob':
-            const age = new Date().getFullYear() - new Date(input.value).getFullYear();
-            if (age < 18) {
-                showError(input, 'You must be at least 18 years old');
-            }
+            const age = new Date().getFullYear() - new Date(value).getFullYear();
+            if (age < 18) show('You must be at least 18 years old');
             break;
     }
-    
+
     checkFormValidity();
 }
 
-function clearErrorForInput(input) {
-    const errorMessage = input.parentNode.querySelector('.error-message');
-    if (errorMessage) {
-        errorMessage.remove();
-    }
-    input.classList.remove('error');
-}
-
+// Check overall form validity and toggle submit button
 function checkFormValidity() {
-    const form = document.getElementById('registrationForm');
-    const submitButton = form.querySelector('button[type="submit"]');
-    
-    const fullname = document.getElementById('fullname');
-    const email = document.getElementById('email');
-    const password = document.getElementById('password');
-    const confirmPassword = document.getElementById('confirmPassword');
-    const dob = document.getElementById('dob');
-    const terms = document.getElementById('terms');
+    const get = id => document.getElementById(id);
 
-    // Check all required fields are filled
-    const isValidName = fullname.value.trim().length >= 2;
-    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value);
-    const isValidPassword = password.value.length >= 8 && 
-                          /[A-Z]/.test(password.value) && 
-                          /[a-z]/.test(password.value) && 
-                          /\d/.test(password.value) && 
-                          /[@$!%*?&]/.test(password.value);
-    const isValidConfirmPassword = password.value === confirmPassword.value && confirmPassword.value !== '';
-    const isValidDob = dob.value && (new Date().getFullYear() - new Date(dob.value).getFullYear() >= 18);
-    const isTermsAccepted = terms.checked;
+    const fullname = get('fullname').value.trim().length >= 2;
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(get('email').value);
+    const password = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/.test(get('password').value);
+    const confirmPassword = get('confirmPassword').value === get('password').value && get('confirmPassword').value !== '';
+    const dob = get('dob').value && (new Date().getFullYear() - new Date(get('dob').value).getFullYear() >= 18);
+    const terms = get('terms').checked;
 
-    // Enable submit button only if all validations pass
-    submitButton.disabled = !(isValidName && 
-                            isValidEmail && 
-                            isValidPassword && 
-                            isValidConfirmPassword && 
-                            isValidDob && 
-                            isTermsAccepted);
+    const allValid = fullname && email && password && confirmPassword && dob && terms;
+
+    document.querySelector('button[type="submit"]').disabled = !allValid;
 }
 
-// Fix validateForm function
-function validateForm(event) {
-    event.preventDefault();
-    
-    // Reset error states
+// Final form validation on submit
+function validateForm(e) {
+    e.preventDefault();
     clearErrors();
-    
-    let isValid = true;
-    
-    // Get form elements
-    const fullname = document.getElementById('fullname');
-    const email = document.getElementById('email');
-    const password = document.getElementById('password');
-    const confirmPassword = document.getElementById('confirmPassword');
-    const phone = document.getElementById('phone');
-    const dob = document.getElementById('dob');
 
-    // Validate full name
-    if (fullname.value.trim().length < 2) {
-        showError(fullname, 'Name must be at least 2 characters long');
-        isValid = false;
+    let valid = true;
+    const get = id => document.getElementById(id);
+    const show = (input, msg) => {
+        showError(input, msg);
+        valid = false;
+    };
+
+    const fullname = get('fullname');
+    if (fullname.value.trim().length < 2) show(fullname, 'Name must be at least 2 characters');
+
+    const email = get('email');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value)) show(email, 'Invalid email address');
+
+    const password = get('password');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/.test(password.value)) {
+        show(password, 'Password must be 8+ chars, with uppercase, lowercase, number & special char');
     }
 
-    // Validate email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.value)) {
-        showError(email, 'Please enter a valid email address');
-        isValid = false;
-    }
+    const confirmPassword = get('confirmPassword');
+    if (password.value !== confirmPassword.value) show(confirmPassword, 'Passwords do not match');
 
-    // Validate password
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password.value)) {
-        showError(password, 'Password must contain at least 8 characters, one uppercase, one lowercase, one number and one special character');
-        isValid = false;
-    }
+    const phone = get('phone');
+    if (phone.value && !/^\d{10}$/.test(phone.value)) show(phone, 'Enter valid 10-digit phone number');
 
-    // Validate password confirmation
-    if (password.value !== confirmPassword.value) {
-        showError(confirmPassword, 'Passwords do not match');
-        isValid = false;
-    }
+    const dob = get('dob');
+    const age = new Date().getFullYear() - new Date(dob.value).getFullYear();
+    if (age < 18) show(dob, 'You must be 18+');
 
-    // Validate phone (if provided)
-    if (phone.value && !phone.value.match(/^\d{10}$/)) {
-        showError(phone, 'Please enter a valid 10-digit phone number');
-        isValid = false;
-    }
-
-    // Validate date of birth
-    const today = new Date();
-    const birthDate = new Date(dob.value);
-    const age = today.getFullYear() - birthDate.getFullYear();
-    
-    if (age < 18) {
-        showError(dob, 'You must be at least 18 years old');
-        isValid = false;
-    }
-
-    if (isValid) {
-        const submitButton = document.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-        alert('Registration successful!');
+    if (valid) {
+        alert('✅ Registration successful!');
         document.getElementById('registrationForm').reset();
-        checkFormValidity(); // Add this to reset button state after form reset
+        checkFormValidity();
     }
 
     return false;
 }
 
+// Show error message
 function showError(input, message) {
     input.classList.add('error');
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.innerText = message;
-    
-    // If input is inside password-container, append error after the container
-    const passwordContainer = input.closest('.password-container');
-    if (passwordContainer) {
-        passwordContainer.parentNode.appendChild(errorDiv);
-    } else {
-        input.parentNode.appendChild(errorDiv);
-    }
+    const error = document.createElement('div');
+    error.className = 'error-message';
+    error.innerText = message;
+
+    const container = input.closest('.password-container')?.parentNode || input.parentNode;
+    container.appendChild(error);
 }
 
-function clearErrorForInput(input) {
-    // If input is inside password-container, look for error in parent's parent
-    const container = input.closest('.password-container');
-    const searchElement = container ? container.parentNode : input.parentNode;
-    
-    const errorMessage = searchElement.querySelector('.error-message');
-    if (errorMessage) {
-        errorMessage.remove();
-    }
+// Clear error for a single input
+function clearError(input) {
+    const container = input.closest('.password-container')?.parentNode || input.parentNode;
+    const error = container.querySelector('.error-message');
+    if (error) error.remove();
     input.classList.remove('error');
 }
 
+// Clear all error messages
 function clearErrors() {
-    const errors = document.querySelectorAll('.error-message');
-    errors.forEach(error => error.remove());
-    
-    const inputs = document.querySelectorAll('.error');
-    inputs.forEach(input => input.classList.remove('error'));
+    document.querySelectorAll('.error-message').forEach(e => e.remove());
+    document.querySelectorAll('.error').forEach(i => i.classList.remove('error'));
 }
